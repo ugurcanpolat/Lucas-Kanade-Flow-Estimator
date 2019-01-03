@@ -118,7 +118,19 @@ class App(QMainWindow):
 
             self.faceDatabase.append(image) # Read sequence image
 
-        self.faceImage = cv2.cvtColor(self.faceDatabase[0], cv2.COLOR_GRAY2RGB)
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Information)
+        msg.setText('Now, select a face image to be detected.')
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec()
+
+        fName = QFileDialog.getOpenFileName(self, 'Open face to be detected', faceDatabaseDir, 'Image files (*.tif)')
+
+        # File open dialog has been dismissed or file could not be found
+        if fName[0] is '':
+            return
+
+        self.faceImage = cv2.imread(fName[0]) # Read the image
 
         self.faceLoaded = True
         self.addImageToGroupBox(self.faceImage, self.faceGroupBox, 'Face recognition image')
