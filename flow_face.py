@@ -201,11 +201,11 @@ class App(QMainWindow):
 
     def calculateOpticalFlowButtonClicked(self):
         if not self.opticalFlowLoaded:
-            # Error: "First load optical flow image" in MessageBox
+            # Error: "First load optical flow images" in MessageBox
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Warning)
-            msg.setWindowTitle("Optical flow image is missing.")
-            msg.setText('First load optical flow image!')
+            msg.setWindowTitle("Optical flow images are missing.")
+            msg.setText('First load optical flow images!')
             msg.setStandardButtons(QMessageBox.Ok)
 
             msg.exec()
@@ -215,11 +215,11 @@ class App(QMainWindow):
 
     def recognizeFaceButtonClicked(self):
         if not self.faceLoaded:
-            # Error: "First load face image" in MessageBox
+            # Error: "First load face database and face image" in MessageBox
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Warning)
-            msg.setWindowTitle("Face image is missing.")
-            msg.setText('First load face image!')
+            msg.setWindowTitle("Face database and face image are missing.")
+            msg.setText('First load face database and face image!')
             msg.setStandardButtons(QMessageBox.Ok)
 
             msg.exec()
