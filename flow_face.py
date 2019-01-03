@@ -8,6 +8,11 @@ from PyQt5.QtCore import Qt
 import numpy as np
 import cv2
 
+FNAME_SEQUENCE_IMG = '/taxi_'
+FNAME_FACE_IMG = '/HR_'
+NUM_SEQUENCE_IMG = 41
+NUM_FACE_IMG = 32
+
 class App(QMainWindow):
     def __init__(self):
         super(App, self).__init__()
@@ -50,38 +55,72 @@ class App(QMainWindow):
                     deleteItemsFromWidget(item.layout())
 
     def openOpticalFlowImage(self):
-        # This function is called when the user clicks File->Open optical flow image.
-        fName = QFileDialog.getOpenFileName(self, 'Open optical flow image', './', 'Image files (*.png *.jpg)')
+        # This function is called when the user clicks File->Open optical flow directory.
+        opticalFlowDir = QFileDialog.getExistingDirectory(self, "Select directory of optical flow images")
 
         # File open dialog has been dismissed or file could not be found
-        if fName[0] is '':
+        if opticalFlowDir is '':
             return
 
         # If there is an input image loaded, remove it
         if self.opticalFlowLoaded:
-            self.deleteItemsFromWidget(self.cornerGroupBox.layout())
+            self.deleteItemsFromWidget(self.opticalFlowGroupBox.layout())
 
-        self.firstOpticalFlowImage = cv2.imread(fName[0]) # Read the image
-        self.opticalFlowPath = fName
+        self.sequenceImages = []
+        for t in range(NUM_SEQUENCE_IMG):
+            if t < 10:
+                fName = opticalFlowDir + FNAME_SEQUENCE_IMG + '000' + str(t) + '.jpg'
+            else:
+                fName = opticalFlowDir + FNAME_SEQUENCE_IMG + '00' + str(t) + '.jpg'
+
+            image = cv2.imread(fName, cv2.IMREAD_GRAYSCALE)
+            if image is None:
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Warning)
+                msg.setWindowTitle("Taxi image not found.")
+                msg.setText('Taxi image not found in given directory!')
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec()
+                return
+
+            self.sequenceImages.append(image) # Read sequence image
+
+        self.firstOpticalFlowImage = cv2.cvtColor(self.sequenceImages[0], cv2.COLOR_GRAY2RGB)
+
         self.opticalFlowLoaded = True
-
         self.addImageToGroupBox(self.firstOpticalFlowImage, self.opticalFlowGroupBox, 'Optical flow image')
 
     def openFaceImage(self):
-        # This function is called when the user clicks File->Open face image.
-        fName = QFileDialog.getOpenFileName(self, 'Open face image', './', 'Image files (*.png *.jpg *.tif)')
+        # This function is called when the user clicks File->Open face database directory.
+        faceDatabaseDir = QFileDialog.getExistingDirectory(self, "Select directory of face images")
 
         # File open dialog has been dismissed or file could not be found
-        if fName[0] is '':
+        if faceDatabaseDir is '':
             return
 
         # If there is an input image loaded, remove it
         if self.faceLoaded:
             self.deleteItemsFromWidget(self.faceGroupBox.layout())
 
-        self.faceImage = cv2.imread(fName[0]) # Read the image
-        self.faceLoaded = True
+        self.faceDatabase = []
+        for t in range(1,NUM_FACE_IMG+1):
+            fName = faceDatabaseDir + FNAME_FACE_IMG + str(t) + '.tif'
+            image = cv2.imread(fName, cv2.IMREAD_GRAYSCALE)
 
+            if image is None:
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Warning)
+                msg.setWindowTitle("Face image not found.")
+                msg.setText('Face image not found in given directory!')
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec()
+                return
+
+            self.faceDatabase.append(image) # Read sequence image
+
+        self.faceImage = cv2.cvtColor(self.faceDatabase[0], cv2.COLOR_GRAY2RGB)
+
+        self.faceLoaded = True
         self.addImageToGroupBox(self.faceImage, self.faceGroupBox, 'Face recognition image')
 
     def createEmptyOpticalFlowGroupBox(self):
@@ -102,10 +141,10 @@ class App(QMainWindow):
         fileMenu = menubar.addMenu('File')
         
         # Create action buttons of the menu bar
-        opticalFlowAct = QAction('Open first taxi image', self)
+        opticalFlowAct = QAction('Open optical flow directory', self)
         opticalFlowAct.triggered.connect(self.openOpticalFlowImage)
 
-        faceAct = QAction('Open first face image', self) 
+        faceAct = QAction('Open face database directory', self) 
         faceAct.triggered.connect(self.openFaceImage)
 
         exitAct = QAction('Exit', self)        
@@ -122,7 +161,7 @@ class App(QMainWindow):
 
         # Create face recognition button for toolbar
         recognizeFaceAct = QAction('Recognize face', self) 
-        recognizeFaceAct.triggered.connect(self.recoginizeFaceButtonClicked)
+        recognizeFaceAct.triggered.connect(self.recognizeFaceButtonClicked)
         
         # Create toolbar
         toolbar = self.addToolBar('Image Operations')
@@ -162,7 +201,7 @@ class App(QMainWindow):
 
         return NotImplemented
 
-    def recoginizeFaceButtonClicked(self):
+    def recognizeFaceButtonClicked(self):
         if not self.faceLoaded:
             # Error: "First load face image" in MessageBox
             msg = QMessageBox()
@@ -173,8 +212,8 @@ class App(QMainWindow):
 
             msg.exec()
             return
-       	
-       	return NotImplemented
+        
+        return NotImplemented
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
