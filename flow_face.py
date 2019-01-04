@@ -83,7 +83,7 @@ class App(QMainWindow):
                 msg.exec()
                 return
 
-            self.sequenceImages.append(image) # Read sequence image
+            self.sequenceImages.append(cv2.resize(image,None,fx=2, fy=2, interpolation=cv2.INTER_CUBIC)) # Read sequence image
 
         self.firstOpticalFlowImage = cv2.cvtColor(self.sequenceImages[0], cv2.COLOR_GRAY2RGB)
 
@@ -211,7 +211,73 @@ class App(QMainWindow):
             msg.exec()
             return
 
-        return NotImplemented
+        height, width = self.sequenceImages[0].shape
+        
+        frames = []
+        for f in range(len(self.sequenceImages)-1):
+            V = self.findOpticalFlowVectors(self.sequenceImages[f], self.sequenceImages[f+1], 50)
+            image = cv2.cvtColor(self.sequenceImages[f].copy(), cv2.COLOR_GRAY2RGB)
+
+            for h in range(25, height-25, 25):
+                for w in range(25, width-25, 25):
+                    point1 = (w,h)
+                    point2 = (w+int(round(V[h,w,1])), h+int(round(V[h,w,0])))
+                    cv2.arrowedLine(image, point1, point2, (0,0,255), 1, cv2.LINE_AA, 0, 0.2)
+
+            frames.append(image) 
+
+            self.deleteItemsFromWidget(self.opticalFlowGroupBox.layout())
+            self.addImageToGroupBox(image, self.opticalFlowGroupBox, 'Optical flow image')
+
+    def findOpticalFlowVectors(self, image1, image2, interval):
+        height, width = image1.shape
+
+        Ix = np.zeros((height, width), dtype=np.float64) # Gradient x
+        Iy = np.zeros((height, width), dtype=np.float64) # Gradient y
+        It = np.zeros((height, width), dtype=np.float64) # Gradient t
+
+        image1 = image1.astype(np.float64)
+        image2 = image2.astype(np.float64)
+
+        for h in range(1,height-1):
+            for w in range(1,width-1):
+                Ix[h,w] = (image1[h+1,w] - image1[h-1,w]) / 2 # X gradient of image pixel
+                Iy[h,w] = (image1[h,w+1] - image1[h,w-1]) / 2 # Y gradient of image pixel
+                It[h,w] = image2[h,w] - image1[h,w] # Time gradient of images
+
+        V = np.zeros((height,width,2), dtype=np.float64)
+
+        s = int(interval/2)
+        e = int(round(interval/2))
+        for h in range(s, height-e):
+            for w in range(s, width-e):
+                dx = Ix[h-s:h+e,w-s:w+e]
+                dy = Iy[h-s:h+e,w-s:w+e]
+                dt = It[h-s:h+e,w-s:w+e]
+
+                T = np.zeros((2,2), dtype=np.float64) # Structure tensor Transpose(A)*A
+                T[0,0] = np.sum(dx*dx, dtype=np.float64)
+                T[0,1] = np.sum(dx*dy, dtype=np.float64)
+                T[1,0] = T[0,1]
+                T[1,1] = np.sum(dy*dy, dtype=np.float64)
+
+                Atb = np.zeros((2,1), dtype=np.float64) # Transpose(A)*b
+                Atb[0] = -1 * np.sum(dx*dt, dtype=np.float64)
+                Atb[1] = -1 * np.sum(dy*dt, dtype=np.float64)
+
+                det = T[0,0] * T[1,1] - T[1,0]**2
+
+                A = np.vstack((dx.flatten(), dy.flatten())).T
+
+                if np.min(abs(np.linalg.eigvals(np.matmul(A.T, A)))) < 0.01:
+                    continue
+
+                if det != 0:
+                    a = np.matmul(np.linalg.inv(T), Atb)
+                    V[h,w,0] = a[0]
+                    V[h,w,1] = a[1]
+
+        return V * 10
 
     def recognizeFaceButtonClicked(self):
         if not self.faceLoaded:
