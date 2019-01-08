@@ -3,15 +3,20 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QMessageBox, QWidget, QGroupBox, \
     QAction, QFileDialog, QGridLayout, QLabel, qApp
+from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
+from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QUrl
 import numpy as np
 import cv2
+import os
 
 FNAME_SEQUENCE_IMG = '/taxi_'
 FNAME_FACE_IMG = '/HR_'
 NUM_SEQUENCE_IMG = 41
 NUM_FACE_IMG = 32
+
+INTERVAL = 15
 
 class App(QMainWindow):
     def __init__(self):
@@ -83,12 +88,13 @@ class App(QMainWindow):
                 msg.exec()
                 return
 
-            self.sequenceImages.append(cv2.resize(image,None,fx=2, fy=2, interpolation=cv2.INTER_CUBIC)) # Read sequence image
+            self.sequenceImages.append(image) # Read sequence image
 
-        self.firstOpticalFlowImage = cv2.cvtColor(self.sequenceImages[0], cv2.COLOR_GRAY2RGB)
+        firstOpticalFlowImage = cv2.cvtColor(self.sequenceImages[0], cv2.COLOR_GRAY2RGB)
+        firstOpticalFlowImage = cv2.resize(firstOpticalFlowImage, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
 
         self.opticalFlowLoaded = True
-        self.addImageToGroupBox(self.firstOpticalFlowImage, self.opticalFlowGroupBox, 'Optical flow image')
+        self.addImageToGroupBox(firstOpticalFlowImage, self.opticalFlowGroupBox, 'Optical flow image')
 
     def openFaceImage(self):
         # This function is called when the user clicks File->Open face database directory.
@@ -146,6 +152,12 @@ class App(QMainWindow):
         layout = QVBoxLayout()
 
         self.faceGroupBox.setLayout(layout)
+
+    def mediaStateChanged(self, state):
+        self.mediaPlayer.play()
+
+    def handleError(self):
+        print("Error: " + self.mediaPlayer.errorString())
 
     def initUI(self):
         # Add menu bar
@@ -212,24 +224,43 @@ class App(QMainWindow):
             return
 
         height, width = self.sequenceImages[0].shape
+
+        fName = 'optical_flow.mp4'
+        fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+        video = cv2.VideoWriter(fName, fourcc, 10, (width*2, height*2))
+
+        size = 35
+        s = int(size/2)
+        e = int(round(size/2))
         
-        frames = []
         for f in range(len(self.sequenceImages)-1):
-            V = self.findOpticalFlowVectors(self.sequenceImages[f], self.sequenceImages[f+1], 50)
+            V = self.findOpticalFlowVectors(self.sequenceImages[f], self.sequenceImages[f+1], size)
             image = cv2.cvtColor(self.sequenceImages[f].copy(), cv2.COLOR_GRAY2RGB)
+            image = cv2.resize(image, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
 
-            for h in range(25, height-25, 25):
-                for w in range(25, width-25, 25):
-                    point1 = (w,h)
-                    point2 = (w+int(round(V[h,w,1])), h+int(round(V[h,w,0])))
-                    cv2.arrowedLine(image, point1, point2, (0,0,255), 1, cv2.LINE_AA, 0, 0.2)
+            for h in range(s, height-e, INTERVAL):
+                for w in range(s, width-e, INTERVAL):
+                    point1 = (w*2,h*2)
+                    point2 = ((w+int(round(V[h,w,1])))*2, (h+int(round(V[h,w,0])))*2)
+                    cv2.arrowedLine(image, point1, point2, (0,255,0), 1, 8, 0, 0.25)
 
-            frames.append(image) 
+            video.write(image)
 
-            self.deleteItemsFromWidget(self.opticalFlowGroupBox.layout())
-            self.addImageToGroupBox(image, self.opticalFlowGroupBox, 'Optical flow image')
+        video.release()
 
-    def findOpticalFlowVectors(self, image1, image2, interval):
+        videoWidget = QVideoWidget()
+        videoWidget.setFixedSize(width*2, height*2)
+        self.mediaPlayer = QMediaPlayer(None, QMediaPlayer.VideoSurface)
+        self.mediaPlayer.setVideoOutput(videoWidget)
+        self.mediaPlayer.stateChanged.connect(self.mediaStateChanged)
+        self.mediaPlayer.error.connect(self.handleError)
+        self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(os.path.dirname(os.path.abspath(__file__)) + '/' + fName)))
+        self.mediaPlayer.play()
+
+        self.deleteItemsFromWidget(self.opticalFlowGroupBox.layout())
+        self.opticalFlowGroupBox.layout().addWidget(videoWidget, 0, Qt.AlignCenter)
+
+    def findOpticalFlowVectors(self, image1, image2, size):
         height, width = image1.shape
 
         Ix = np.zeros((height, width), dtype=np.float64) # Gradient x
@@ -247,10 +278,11 @@ class App(QMainWindow):
 
         V = np.zeros((height,width,2), dtype=np.float64)
 
-        s = int(interval/2)
-        e = int(round(interval/2))
-        for h in range(s, height-e):
-            for w in range(s, width-e):
+        s = int(size/2)
+        e = int(round(size/2))
+
+        for h in range(s, height-e, INTERVAL):
+            for w in range(s, width-e, INTERVAL):
                 dx = Ix[h-s:h+e,w-s:w+e]
                 dy = Iy[h-s:h+e,w-s:w+e]
                 dt = It[h-s:h+e,w-s:w+e]
@@ -268,7 +300,6 @@ class App(QMainWindow):
                 det = T[0,0] * T[1,1] - T[1,0]**2
 
                 A = np.vstack((dx.flatten(), dy.flatten())).T
-
                 if np.min(abs(np.linalg.eigvals(np.matmul(A.T, A)))) < 0.01:
                     continue
 
@@ -277,7 +308,7 @@ class App(QMainWindow):
                     V[h,w,0] = a[0]
                     V[h,w,1] = a[1]
 
-        return V * 10
+        return V * 5
 
     def recognizeFaceButtonClicked(self):
         if not self.faceLoaded:
