@@ -28,9 +28,6 @@ class App(QMainWindow):
         self.opticalFlowLoaded = False
         self.faceLoaded = False
 
-        # Fix the size so boxes cannot expand
-        self.setFixedSize(self.geometry().width(), self.geometry().height())
-
         self.initUI()
 
     def addImageToGroupBox(self, image, groupBox, labelString):
