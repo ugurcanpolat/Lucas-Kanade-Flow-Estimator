@@ -106,7 +106,11 @@ class App(QMainWindow):
 
         # If there is an input image loaded, remove it
         if self.faceLoaded:
-            self.deleteItemsFromWidget(self.faceGroupBox.layout())
+            self.deleteItemsFromWidget(self.meanImageGroupBox.layout())
+            for i in range(5):
+                self.deleteItemsFromWidget(self.eigenfaceGroupBoxes[i].layout())
+            self.deleteItemsFromWidget(self.inputFaceGroupBox.layout())
+            self.deleteItemsFromWidget(self.recognizedFaceGroupBox.layout())
 
         self.faceDatabase = []
         for t in range(1,NUM_FACE_IMG+1):
@@ -126,11 +130,11 @@ class App(QMainWindow):
 
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Information)
-        msg.setText('Now, select a face image to be detected.')
+        msg.setText('Now, select a face image to be recognized.')
         msg.setStandardButtons(QMessageBox.Ok)
         msg.exec()
 
-        fName = QFileDialog.getOpenFileName(self, 'Open face to be detected', faceDatabaseDir, 'Image files (*.tif)')
+        fName = QFileDialog.getOpenFileName(self, 'Open face to be recognized', faceDatabaseDir, 'Image files (*.tif)')
 
         # File open dialog has been dismissed or file could not be found
         if fName[0] is '':
@@ -139,7 +143,7 @@ class App(QMainWindow):
         self.faceImage = cv2.imread(fName[0]) # Read the image
 
         self.faceLoaded = True
-        self.addImageToGroupBox(self.faceImage, self.faceGroupBox, 'Face recognition image')
+        self.addImageToGroupBox(self.faceImage, self.inputFaceGroupBox, 'Face recognition image')
 
     def createEmptyOpticalFlowGroupBox(self):
         self.opticalFlowGroupBox = QGroupBox('Optical Flow Estimation')
@@ -149,7 +153,56 @@ class App(QMainWindow):
 
     def createEmptyFaceRecognitionGroupBox(self):
         self.faceGroupBox = QGroupBox('Face Recognition using Eigenfaces')
-        layout = QVBoxLayout()
+        layout = QGridLayout()
+
+        self.meanImageGroupBox = QGroupBox('Mean image')
+        meanImageLayout = QVBoxLayout()
+        self.meanImageGroupBox.setLayout(meanImageLayout)
+
+        self.eigenfaceGroupBoxes = []
+
+        firstEigenfaceGroupBox = QGroupBox('First Eigenface')
+        firstEigenfaceLayout = QVBoxLayout()
+        firstEigenfaceGroupBox.setLayout(firstEigenfaceLayout)
+        self.eigenfaceGroupBoxes.append(firstEigenfaceGroupBox)
+
+        secondEigenfaceGroupBox = QGroupBox('Second Eigenface')
+        secondEigenfaceLayout = QVBoxLayout()
+        secondEigenfaceGroupBox.setLayout(secondEigenfaceLayout)
+        self.eigenfaceGroupBoxes.append(secondEigenfaceGroupBox)
+
+        thirdEigenfaceGroupBox = QGroupBox('Third Eigenface')
+        thirdEigenfaceLayout = QVBoxLayout()
+        thirdEigenfaceGroupBox.setLayout(thirdEigenfaceLayout)
+        self.eigenfaceGroupBoxes.append(thirdEigenfaceGroupBox)
+
+        fourthEigenfaceGroupBox = QGroupBox('Fourth Eigenface')
+        fourthEigenfaceLayout = QVBoxLayout()
+        fourthEigenfaceGroupBox.setLayout(fourthEigenfaceLayout)
+        self.eigenfaceGroupBoxes.append(fourthEigenfaceGroupBox)
+
+        fifthEigenfaceGroupBox = QGroupBox('Fifth Eigenface')
+        fifthEigenfaceLayout = QVBoxLayout()
+        fifthEigenfaceGroupBox.setLayout(fifthEigenfaceLayout)
+        self.eigenfaceGroupBoxes.append(fifthEigenfaceGroupBox)
+
+        layout.addWidget(self.meanImageGroupBox, 0, 0, 1, 2)
+        layout.addWidget(firstEigenfaceGroupBox, 0, 2, 1, 2)
+        layout.addWidget(secondEigenfaceGroupBox, 0, 4, 1, 2)
+        layout.addWidget(thirdEigenfaceGroupBox, 1, 0, 1, 2)
+        layout.addWidget(fourthEigenfaceGroupBox, 1, 2, 1, 2)
+        layout.addWidget(fifthEigenfaceGroupBox, 1, 4, 1, 2)
+
+        self.inputFaceGroupBox = QGroupBox('Input image')
+        inputFaceLayout = QVBoxLayout()
+        self.inputFaceGroupBox.setLayout(inputFaceLayout)
+
+        self.recognizedFaceGroupBox = QGroupBox('Recognized face')
+        recognizedFaceLayout = QVBoxLayout()
+        self.recognizedFaceGroupBox.setLayout(recognizedFaceLayout)
+
+        layout.addWidget(self.inputFaceGroupBox, 2, 0, 1, 3)
+        layout.addWidget(self.recognizedFaceGroupBox, 2, 3, 1, 3)
 
         self.faceGroupBox.setLayout(layout)
 
@@ -304,9 +357,9 @@ class App(QMainWindow):
                     continue
 
                 if det != 0:
-                    a = np.matmul(np.linalg.inv(T), Atb)
-                    V[h,w,0] = a[0]
-                    V[h,w,1] = a[1]
+                    velocity = np.matmul(np.linalg.inv(T), Atb)
+                    V[h,w,0] = velocity[0]
+                    V[h,w,1] = velocity[1]
 
         return V * 5
 
@@ -321,8 +374,60 @@ class App(QMainWindow):
 
             msg.exec()
             return
+
+        height, width = self.faceDatabase[0].shape
+        dbSize = len(self.faceDatabase)
+
+        X = np.zeros((dbSize,height*width))
+        for i in range(dbSize):
+            X[i] = self.faceDatabase[i].flatten()
+
+        mu_X = np.sum(X, axis=0, dtype=np.float64) / dbSize
+        Z = X - mu_X
+
+        meanImage = self.flattenArrayToImage(mu_X, height, width)
+        self.addImageToGroupBox(meanImage, self.meanImageGroupBox, 'Face recognition image')
         
-        return NotImplemented
+        _, s, vh = np.linalg.svd(Z, full_matrices=False)
+
+        eigenvalues = s**2
+        B = vh.T # Eigenvectors
+
+        grayFaceImage = cv2.cvtColor(self.faceImage, cv2.COLOR_BGR2GRAY)
+        smoothedFaceImage = cv2.GaussianBlur(grayFaceImage, (5,5), 1, None, 0)
+        smoothedFaceImage = smoothedFaceImage.flatten()
+
+        d = B.shape[1]
+
+        for j in range(5):
+            eigenface = self.flattenArrayToImage(B[:,j].T, height, width)
+            self.addImageToGroupBox(eigenface, self.eigenfaceGroupBoxes[j], 'Eigenface image')
+
+        p_est = np.zeros(d)
+        y_est = np.zeros((NUM_FACE_IMG, d))
+        for j in range(d):
+            p_est[j] = np.matmul(B[:,j].T, (smoothedFaceImage - mu_X).T)
+
+            for i in range(NUM_FACE_IMG):
+                y_est[i, j] = np.matmul(B[:,j].T, Z[i].T)
+
+        error = np.zeros(NUM_FACE_IMG)
+        for i in range(NUM_FACE_IMG):
+            error[i] = np.sum((y_est[i] - p_est)**2)
+
+        closestIndex = np.argmin(error)
+
+        x_i = mu_X + np.matmul(B, y_est[closestIndex])
+        x_i = self.flattenArrayToImage(x_i, height, width)
+        self.addImageToGroupBox(x_i, self.recognizedFaceGroupBox, 'Face recognition image')
+
+    def flattenArrayToImage(self, array, height, width):
+        image = array.copy()
+        image -= np.min(image)
+        image *= (255 / np.max(image))
+        image = image.astype(np.uint8)
+        image = image.reshape((height, width))
+        return cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
